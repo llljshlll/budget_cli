@@ -1,12 +1,12 @@
 # 콘솔 가계부 `budget_app` 설명 문서
 
-> 평가 때 위에서 아래로 따라가며 설명하기 위한 문서입니다. 파일명과 줄 번호는 현재 코드 기준이고, 실행 결과는 실제로 돌려서 얻은 출력입니다.
+> 평가 때 위에서 아래로 따라가며 설명하기 위한 문서. 파일명과 줄 번호는 현재 코드 기준, 실행 결과는 실제로 돌려서 얻은 출력
 
 ---
 
 ## 1. 프로젝트 개요
 
-### 무엇을 만들었나
+### 만든 것
 
 Python 표준 라이브러리만 사용한 **콘솔 가계부**
  터미널에서 명령어로 수입/지출을 기록하고, 조회·검색·수정·삭제하고, 월별 요약과 예산 초과 경고를 볼 수 있음. 데이터는 파일에 저장되어서 프로그램을 껐다 켜도 남음
@@ -20,22 +20,27 @@ python3 -m budget_app summary --month 2024-01
 
 ---
 
-## 2. 요구사항과 구현 결과
+## 2. 요구사항과 구현 결과  
+__main__.py → cli.main()이 build_parser().parse_args()로 인자를 파싱   
+→ run()(@handle_errors)이 Storage.initialize()로 폴더와 파일을 보장하고 로깅을 설정    
+→ args.func(cmd_*)가 AppContext의 서비스를 호출   
+→ 서비스가 storage.py의 저장소를 호출   
+→ formatters.py가 출력 문자열을 만들고, 종료 코드를 반환    
 
 ### 필수 기능 10가지
 
-| # | 기능 | 명령 | 진입 함수 (cli.py) | 핵심 로직 위치 | 검증 |
-| --- | --- | --- | --- | --- | --- |
-| 1 | 거래 추가 | `add` | `cmd_add` :50 | `TransactionService.add` services.py:82 | 7장 시연 ①, test_service `TransactionTests` |
-| 2 | 거래 목록 | `list --limit N` | `cmd_list` :73 | `list_recent` services.py:133 → `search` :160 | 시연 ②, 30만 건 측정 |
-| 3 | 거래 검색 | `search --from --to --category --type --q --tag` | `cmd_search` :78 | `make_criteria` :136, `SearchCriteria.matches` models.py:181 | 시연 ③, test_service `SearchTests` |
-| 4 | 월별 요약 | `summary --month --top` | `cmd_summary` :87 | `ReportService.monthly_summary` services.py:192 | 시연 ④, test_service `SummaryTests` |
-| 5 | 예산 설정/조회 | `budget set`, `budget show` | `cmd_budget_set` :93 | `BudgetService.set` services.py:177 → `BudgetStore` storage.py:186 | 시연 ④⑤ |
-| 6 | 카테고리 관리 | `category add/list/remove` | `cmd_category_*` :109~128 | `CategoryService` services.py:36 | 시연 ⑦, test_service `CategoryTests` |
-| 7 | 거래 수정 | `update --id ...` | `cmd_update` :134 | `TransactionService.update` services.py:97 → `TransactionRepository.update` storage.py:123 | 시연 ⑥ |
-| 8 | 거래 삭제 | `delete --id` | `cmd_delete` :144 | `TransactionRepository.delete` storage.py:131 | 시연 ⑥ |
-| 9 | 가져오기 | `import --from` | `cmd_import` :150 | `CsvService.import_` services.py:256 + `csv_io.read_rows` :44 | 시연 ⑧⑨ |
-| 10 | 내보내기 | `export --out --month` | `cmd_export` :158 | `CsvService.export` services.py:237 + `csv_io.write_transactions` :17 | 시연 ⑧ |
+| # | 기능 | 명령 |
+| --- | --- | --- |
+| 1 | 거래 추가 | `add` |
+| 2 | 거래 목록 | `list --limit N` |
+| 3 | 거래 검색 | `search --from --to --category --type --q --tag` |
+| 4 | 월별 요약 | `summary --month --top` |
+| 5 | 예산 설정/조회 | `budget set`, `budget show` |
+| 6 | 카테고리 관리 | `category add/list/remove` |
+| 7 | 거래 수정 | `update --id ...` |
+| 8 | 거래 삭제 | `delete --id` |
+| 9 | 가져오기 | `import --from` |
+| 10 | 내보내기 | `export --out --month` |
 
 ### 공통 요구사항
 
@@ -55,17 +60,15 @@ python3 -m budget_app summary --month 2024-01
 | 스택트레이스 금지, 종료 코드 | `handle_errors` | decorators.py:73 |
 | 모듈 3개 이상 | 8개 | `budget_app/` |
 | 표준 라이브러리만 사용 | 외부 import 없음 | 전체 |
-| README | 실행 방법·저장 파일·명령 예시·CSV 스키마 | README.md |
 
-### 설계 선택 (평가 때 "왜?"라고 물을 만한 곳)
+### 설계 선택
 
 | 선택 | 이유 |
 | --- | --- |
-| 저장 포맷은 **JSONL** | 한 줄이 한 레코드라 한 줄씩 읽는 스트리밍에 맞고, tags를 리스트 그대로 저장할 수 있다 (9번 비교는 4장) |
-| update는 **옵션 방식** | `update --id X --amount 5000`처럼 바꿀 항목만 적을 수 있고 테스트하기 쉽다 |
-| 초기 카테고리는 **자동 생성** | 첫 실행부터 바로 `add`를 쓸 수 있다 |
+| 저장 포맷은 **JSONL** | 한 줄이 한 레코드라 한 줄씩 읽는 스트리밍에 적합, tags를 리스트 그대로 저장 가능 (9번 비교는 4장) |
+| update는 **옵션 방식** | `update --id X --amount 5000`처럼 바꿀 항목만 적을 수 있고 테스트가 쉬움 |
 | 사용 중인 카테고리는 **삭제 차단** | 거래가 존재하지 않는 카테고리를 가리키는 상황을 원천 차단하는 가장 단순한 방법 |
-| 최신순 기준은 `(날짜, id)` 내림차순 | 날짜가 같으면 나중에 만든 거래가 먼저 나온다 |
+| 최신순 기준은 `(날짜, id)` 내림차순 | 날짜가 같으면 나중에 만든 거래가 먼저 나옴 |
 
 ---
 
@@ -84,19 +87,17 @@ budget-cli/
 │   ├── csv_io.py       CSV 스키마와 읽기/쓰기
 │   ├── formatters.py   출력 문자열 (한글 폭을 고려한 표 정렬)
 │   └── decorators.py   handle_errors / log_call / timed
-├── tests/              unittest 57개
-├── data/               실행 시 생성되는 저장 폴더 (git 제외)
+├── data/               실행 시 생성되는 저장 폴더
 │   ├── transactions.jsonl
 │   ├── categories.jsonl
 │   ├── budgets.jsonl
 │   └── budget.log
-├── README.md
-└── EXPLAIN.md
+└── README.md
 ```
 
 ### 모듈 관계
 
-호출은 위에서 아래로만 흐르고, **아래 계층은 위 계층을 import하지 않습니다.**
+호출은 위에서 아래로만 흐르며, **아래 계층은 위 계층을 import하지 않음**
 
 ```
           사용자
@@ -112,7 +113,7 @@ budget-cli/
    └───────┬─────────┘
            ▼
    ┌─────────────────┐
-   │   storage.py    │  파일에서 읽고 쓰기만 한다 (규칙은 모른다)
+   │   storage.py    │  파일 읽기/쓰기만 담당 (규칙은 모름)
    └───────┬─────────┘
            ▼
      data/*.jsonl
@@ -125,7 +126,7 @@ budget-cli/
 
 | 계층 | 클래스 | 맡은 일 | 모르는 것 |
 | --- | --- | --- | --- |
-| storage | `JsonlFile[T]` | 한 줄씩 읽기, append, 안전하게 다시 쓰기 | 거래가 무엇인지 |
+| storage | `JsonlFile[T]` | 한 줄씩 읽기, append, 안전하게 다시 쓰기 | 거래의 정의 |
 | storage | `TransactionRepository` | 거래의 id 발급, 조회, 수정, 삭제 | 카테고리 규칙 |
 | storage | `CategoryStore`, `BudgetStore` | 카테고리/예산 파일 읽기·쓰기 | 업무 규칙 |
 | storage | `Storage` | 파일 3개를 묶고 첫 실행 때 초기화 | |
@@ -137,7 +138,7 @@ budget-cli/
 | services | `AppContext` | 위 서비스들을 한 번에 조립 | |
 | cli | 함수 `cmd_*` | 입력 받고 서비스 호출하고 출력 | 규칙 판단 |
 
-**예시**: "사용 중인 카테고리는 삭제하지 못한다"는 규칙은 `CategoryService.remove`(services.py:62)에만 있습니다. 저장소는 그냥 지우는 일만 하고, CLI는 서비스가 던진 예외를 메시지로 보여줄 뿐입니다. 규칙을 바꾸고 싶을 때 고칠 곳이 한 군데입니다.
+**예시**: "사용 중인 카테고리는 삭제 불가"라는 규칙은 `CategoryService.remove`(services.py:62)에만 존재. 저장소는 지우는 일만 담당, CLI는 서비스가 던진 예외를 메시지로 보여줄 뿐. 규칙 변경 시 고칠 곳은 한 군데
 
 ### 데이터 흐름 (거래 추가)
 
@@ -164,7 +165,7 @@ add 입력
 
 ### 4.1 Generator (제너레이터)
 
-**한 줄 정의**: 값을 `return`으로 한꺼번에 주지 않고 `yield`로 **하나씩 건네주는** 함수입니다. 뷔페처럼 한 접시씩 가져옵니다.
+**한 줄 정의**: 값을 `return`으로 한꺼번에 주지 않고 `yield`로 **하나씩 건네주는** 함수. 뷔페처럼 한 접시씩 가져오는 방식
 
 **내 코드** — `storage.py:46`
 
@@ -173,12 +174,12 @@ def stream(self) -> Iterator[T]:
     with self.path.open("r", encoding="utf-8") as handle:
         for line_no, line in enumerate(handle, start=1):
             ...
-            yield item        # 한 건을 돌려주고, 다음 요청이 올 때까지 멈춘다
+            yield item        # 한 건을 돌려주고, 다음 요청이 올 때까지 정지
 ```
 
-**왜 썼나**: `list`로 전부 읽으면 거래 수만큼 메모리를 씁니다. 제너레이터는 필요한 만큼만 읽습니다.
+**사용 이유**: `list`로 전부 읽으면 거래 수만큼 메모리 사용. 제너레이터는 필요한 만큼만 읽음
 
-**최신순이 문제였다**: 파일에는 오래된 거래가 먼저 쌓이는데, 출력은 최신순이어야 합니다. 그래서 스트림을 `heapq.nlargest(limit, ...)`에 넘깁니다(`services.py:169`). 이 함수는 "지금까지 본 것 중 가장 큰 limit개"만 들고 있으므로 파일이 아무리 커도 메모리는 limit 건수만큼입니다.
+**최신순이 문제**: 파일에는 오래된 거래가 먼저 쌓이지만 출력은 최신순 필요. 그래서 스트림을 `heapq.nlargest(limit, ...)`에 전달(`services.py:169`). 이 함수는 "지금까지 본 것 중 가장 큰 limit개"만 보관하므로 파일이 아무리 커도 메모리는 limit 건수 수준
 
 **측정 결과** (35MB, 30만 건 파일)
 
@@ -188,13 +189,13 @@ def stream(self) -> Iterator[T]:
 | `summary --month 2024-05` | 약 21MB |
 | 비교: 파일 전체를 리스트로 읽기 | 약 299MB |
 
-`list`, `search`, `summary`, `export`가 모두 같은 `stream()`을 한 번 훑는 방식으로 동작합니다.
+`list`, `search`, `summary`, `export`가 모두 같은 `stream()`을 한 번 훑는 방식으로 동작
 
-**한계**: `search`를 `--limit` 없이 쓰면 조건에 맞는 거래 전부를 정렬해야 해서 그 건수만큼 메모리를 씁니다.
+**한계**: `search`를 `--limit` 없이 쓰면 조건에 맞는 거래 전부를 정렬해야 하므로 그 건수만큼 메모리 사용
 
 ### 4.2 Decorator (데코레이터)
 
-**한 줄 정의**: 함수를 감싸서 **원래 코드를 건드리지 않고** 기능을 덧붙이는 문법입니다. 선물 포장지처럼 겉에 하나 더 씌웁니다.
+**한 줄 정의**: 함수를 감싸서 **원래 코드를 건드리지 않고** 기능을 덧붙이는 문법. 선물 포장지처럼 겉에 하나 더 씌우는 방식
 
 **내 코드** — `decorators.py`에 3개
 
@@ -213,13 +214,13 @@ def log_call(func):
             result = func(*args, **kwargs)  # 원래 함수 실행
         except Exception:
             logger.warning("fail ...")
-            raise                           # 예외는 그대로 다시 던진다
+            raise                           # 예외는 그대로 다시 던짐
         logger.info("ok   %s", ...)
         return result
     return wrapper
 ```
 
-**왜 썼나**: 서비스 메서드마다 로그와 try/except를 쓰면 중복이 생기고 본래 로직이 묻힙니다. 데코레이터를 쓰면 서비스 코드는 업무 규칙만 남습니다.
+**사용 이유**: 서비스 메서드마다 로그와 try/except를 쓰면 중복 발생, 본래 로직 은폐. 데코레이터 사용 시 서비스 코드에는 업무 규칙만 남음
 
 **실제 로그** (`data/budget.log`)
 
@@ -230,11 +231,11 @@ INFO time ReportService.monthly_summary 0.1ms
 WARNING fail TransactionService.delete: NotFoundError: 존재하지 않는 거래 id 입니다: TX-999
 ```
 
-> 참고: 코드에 보이는 `ParamSpec`, `Callable[P, R]`은 "감싼 함수의 인자 모양을 그대로 유지한다"는 타입 표기일 뿐이고, 실행 동작에는 영향이 없습니다.
+> 참고: 코드에 보이는 `ParamSpec`, `Callable[P, R]`은 "감싼 함수의 인자 모양을 그대로 유지"하는 타입 표기일 뿐, 실행 동작에는 영향 없음
 
 ### 4.3 Type Hint (타입 힌트)
 
-**한 줄 정의**: 함수의 인자와 반환값이 어떤 타입인지 **코드에 미리 적어 두는** 표기입니다. 실행을 막지는 않지만 읽는 사람과 도구에게 약속이 됩니다.
+**한 줄 정의**: 함수의 인자와 반환값이 어떤 타입인지 **코드에 미리 적어 두는** 표기. 실행을 막지는 않지만 읽는 사람과 도구에게 약속 역할
 
 **내 코드에서 눈에 띄는 것**
 
@@ -246,13 +247,13 @@ WARNING fail TransactionService.delete: NotFoundError: 존재하지 않는 거�
 | `class JsonlFile(Generic[T])` | storage.py:33 | `T`는 자리표시자. 거래/카테고리/예산 저장소가 같은 코드를 공유 |
 | `def parse_amount(value: str \| int) -> int` | models.py:75 | 문자열이나 정수를 받아 항상 양의 정수를 돌려줌 |
 
-**얻는 이점**: 함수 정의만 읽어도 무엇을 넣고 무엇이 나오는지 압니다. 에디터가 오타나 타입 불일치를 미리 알려 줍니다.
+**얻는 이점**: 함수 정의만 읽어도 무엇을 넣고 무엇이 나오는지 파악 가능. 에디터가 오타나 타입 불일치를 미리 알려 줌
 
-**주의**: 타입을 자동 검사하는 도구(mypy)는 설치하지 않아 돌려 보지 않았습니다. 타입 힌트는 문서화와 에디터 지원 용도로 썼습니다.
+**주의**: 타입을 자동 검사하는 도구(mypy)는 미설치로 실행하지 않음. 타입 힌트는 문서화와 에디터 지원 용도로 사용
 
 ### 4.4 Dataclass
 
-**한 줄 정의**: 데이터를 담는 클래스를 `__init__` 등을 직접 쓰지 않고 선언만으로 만드는 문법입니다.
+**한 줄 정의**: 데이터를 담는 클래스를 `__init__` 등을 직접 쓰지 않고 선언만으로 만드는 문법
 
 **내 코드** — `models.py:131`
 
@@ -268,9 +269,9 @@ class Transaction:
     tags: tuple[str, ...] = ()
 ```
 
-- `frozen=True`: 만든 뒤 값을 바꿀 수 없습니다. 수정할 때는 `dataclasses.replace()`로 **새 객체**를 만들어서(`services.py` update) 의도치 않은 변경을 막습니다.
-- 같은 방식으로 `Budget`, `SearchCriteria`, `MonthlySummary`, `ImportResult`를 정의했습니다.
-- `to_dict()` / `from_dict()`로 파일의 JSON 한 줄과 객체를 오갑니다.
+- `frozen=True`: 만든 뒤 값 변경 불가. 수정 시 `dataclasses.replace()`로 **새 객체**를 만들어(`services.py` update) 의도치 않은 변경 방지
+- 같은 방식으로 `Budget`, `SearchCriteria`, `MonthlySummary`, `ImportResult` 정의
+- `to_dict()` / `from_dict()`로 파일의 JSON 한 줄과 객체를 상호 변환
 
 ### 4.5 파일 I/O
 
@@ -301,19 +302,19 @@ class Transaction:
 | memo | N | 문자열 |
 | tags | N | 쉼표 구분 문자열 (CSV에서는 따옴표로 감싸짐) |
 
-UTF-8, 첫 줄은 헤더입니다. 읽을 때는 BOM이 있어도 받고, 컬럼 순서는 상관없습니다. 필수 컬럼이 빠지면 파일 전체를 거부합니다.
+UTF-8, 첫 줄은 헤더. 읽을 때 BOM이 있어도 수용, 컬럼 순서는 무관. 필수 컬럼이 빠지면 파일 전체 거부
 
 ---
 
 ## 5. 핵심 기능의 코드 실행 흐름
 
-공통 진입부터 보겠습니다.
+공통 진입 흐름
 
 ```
 python3 -m budget_app <명령>
   → __main__.py → cli.main()                    cli.py:296
   → build_parser().parse_args()                 명령/옵션 해석
-  → run(args)  ← @handle_errors로 감싸져 있음      cli.py:286
+  → run(args)  ← @handle_errors로 감싸짐      cli.py:286
         Storage(data_dir).initialize()          폴더/파일 없으면 생성
         로그 파일 설정
         args.func(args, AppContext(storage))    선택된 cmd_* 실행
@@ -325,8 +326,8 @@ python3 -m budget_app <명령>
 ```
 ① 입력      cli.cmd_add (cli.py:50)
               _prompt("날짜: ", parse_date)       ┐ 검증 실패 시
-              _prompt("타입: ", parse_type)       │ [오류]/[힌트] 출력하고
-              _prompt("카테고리: ", require)       │ 같은 항목을 다시 묻는다
+              _prompt("타입: ", parse_type)       │ [오류]/[힌트] 출력 후
+              _prompt("카테고리: ", require)       │ 같은 항목 재질문
               _prompt("금액: ", parse_amount)     ┘
 ② 검증      models.parse_* (models.py:53~110)
               날짜 형식, 양수 정수, income/expense 확인
@@ -339,7 +340,7 @@ python3 -m budget_app <명령>
 ⑤ 출력      "[저장 완료] id=TX-000012"
 ```
 
-검증을 CLI와 서비스에서 두 번 하는 이유는 역할이 다르기 때문입니다. CLI는 "틀리면 바로 다시 묻기"를 위해, 서비스는 CLI가 아닌 경로(CSV import 등)로 들어온 값도 막기 위해서입니다.
+검증을 CLI와 서비스에서 두 번 하는 이유는 역할 차이. CLI는 "틀리면 바로 다시 묻기"를 위해, 서비스는 CLI가 아닌 경로(CSV import 등)로 들어온 값도 막기 위함
 
 ### 5.2 `list` / `search` — 스트리밍 + 최신순
 
@@ -377,11 +378,11 @@ cmd_update → TransactionService.update (@log_call)              services.py:97
         ① 같은 폴더에 임시 파일 생성
         ② 원본을 한 줄씩 읽으며, 대상 id만 새 내용으로 바꿔 임시 파일에 씀
         ③ flush + fsync (디스크에 확실히 기록)
-        ④ os.replace(임시, 원본)   ← 이름만 바꾸는 한 번의 동작이라 중간 상태가 없다
+        ④ os.replace(임시, 원본)   ← 이름만 바꾸는 한 번의 동작이라 중간 상태 없음
         ⑤ 예외가 나면 임시 파일 삭제, 원본은 그대로
 ```
 
-`delete`도 같은 `rewrite`를 쓰되 대상 id를 건너뛰고 씁니다.
+`delete`도 같은 `rewrite`를 쓰되 대상 id를 건너뛰고 기록
 
 ### 5.5 `import` — 부분 성공
 
@@ -401,7 +402,7 @@ cmd_import → CsvService.import_ (@log_call @timed)              services.py:25
 
 ### 6.1 예외 구조
 
-`models.py:19`의 `BudgetAppError`가 모든 앱 예외의 부모이고, **원인(message)** 과 **해결 힌트(hint)** 를 항상 가집니다.
+`models.py:19`의 `BudgetAppError`가 모든 앱 예외의 부모 클래스이며, **원인(message)** 과 **해결 힌트(hint)** 를 항상 보유
 
 ```
 BudgetAppError
@@ -409,10 +410,10 @@ BudgetAppError
 ├── NotFoundError       없는 id, 등록되지 않은 카테고리
 ├── DuplicateError      이미 있는 카테고리
 ├── CategoryInUseError  거래가 쓰는 카테고리 삭제 시도
-└── StorageError        저장 파일이 손상되었거나 쓸 수 없음
+└── StorageError        저장 파일 손상 또는 쓰기 불가
 ```
 
-`@handle_errors`(decorators.py:73)가 이 예외를 잡아 다음 형태로 출력합니다. **스택트레이스는 화면에 나오지 않습니다.**
+`@handle_errors`(decorators.py:73)가 이 예외를 잡아 다음 형태로 출력. **스택트레이스는 화면에 미출력**
 
 ```
 [오류] 날짜 형식이 올바르지 않습니다 (YYYY-MM-DD).
@@ -472,11 +473,11 @@ BudgetAppError
 
 ### 7.1 시연 (명령어 → 기대 결과 → 실제 출력)
 
-출력은 실제 실행 결과입니다(①만 입력을 읽기 쉽게 줄 단위로 정리했습니다). `--data-dir`로 빈 폴더를 지정해 처음부터 진행했고, 보기 편하도록 아래 명령에서는 `--data-dir` 옵션을 생략했습니다.
+출력은 실제 실행 결과(①만 입력을 읽기 쉽게 줄 단위로 정리). `--data-dir`로 빈 폴더를 지정해 처음부터 진행. 보기 편하도록 아래 명령에서는 `--data-dir` 옵션 생략
 
 **① add — 오류 후 재입력, 저장 성공**
 
-기대: 잘못된 날짜·없는 카테고리·0원은 힌트와 함께 다시 묻고, 올바른 값이 들어오면 id를 출력한다.
+기대: 잘못된 날짜·없는 카테고리·0원은 힌트와 함께 재질문, 올바른 값 입력 시 id 출력
 
 ```
 $ python3 -m budget_app add
@@ -498,11 +499,11 @@ $ python3 -m budget_app add
 [저장 완료] id=TX-000001
 ```
 
-(위는 입력을 표시하기 쉽게 정리한 것입니다. 실제로는 입력이 같은 줄에 이어집니다.)
+(위는 입력을 표시하기 쉽게 정리한 것. 실제로는 입력이 같은 줄에 이어짐)
 
 **② list — 최신순**
 
-기대: 날짜가 최신인 순으로, 열이 정렬되어 출력된다.
+기대: 날짜 최신순, 열 정렬 상태로 출력
 
 ```
 $ python3 -m budget_app list --limit 3
@@ -520,7 +521,7 @@ TX-000001 | 2024-01-15 | expense | food | 15000 | 점심  #meal
 
 **④ budget set + summary**
 
-기대: 합계와 TOP N, 예산 사용률이 나온다.
+기대: 합계, TOP N, 예산 사용률 출력
 
 ```
 $ python3 -m budget_app budget set --month 2024-01 --amount 500000
@@ -576,7 +577,7 @@ $ python3 -m budget_app category remove --name food
 
 **⑧ export / import 왕복**
 
-기대: 내보낸 CSV를 그대로 다시 가져올 수 있다.
+기대: 내보낸 CSV를 그대로 다시 가져오기 가능
 
 ```
 $ python3 -m budget_app export --out e.csv --month 2024-01
