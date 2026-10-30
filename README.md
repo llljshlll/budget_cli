@@ -14,7 +14,7 @@ Python 표준 라이브러리만 사용한 **콘솔 가계부**
 ```bash
 python3 -m budget_app add        # 대화형으로 거래 추가
 python3 -m budget_app list       # 최신순 목록
-python3 -m budget_app summary --month 2024-01
+python3 -m budget_app summary --month 2026-10
 ```
 
 
@@ -155,9 +155,9 @@ add 입력
 
 | 파일 | 한 줄 예시 |
 | --- | --- |
-| `transactions.jsonl` | `{"id":"TX-000001","type":"expense","date":"2024-01-15","amount":18000,"category":"food","memo":"점심","tags":["meal"]}` |
+| `transactions.jsonl` | `{"id":"TX-000001","type":"expense","date":"2026-10-15","amount":18000,"category":"food","memo":"점심","tags":["meal"]}` |
 | `categories.jsonl` | `{"name":"food"}` |
-| `budgets.jsonl` | `{"month":"2024-01","amount":100000}` |
+| `budgets.jsonl` | `{"month":"2026-10","amount":100000}` |
 
 ---
 
@@ -165,9 +165,8 @@ add 입력
 
 ### 4.1 Generator (제너레이터)
 
-**한 줄 정의**: 값을 `return`으로 한꺼번에 주지 않고 `yield`로 **하나씩 건네주는** 함수. 뷔페처럼 한 접시씩 가져오는 방식
+**한 줄 정의**: 값을 `return`으로 한꺼번에 주지 않고 `yield`로 **하나씩 건네주는** 함수.
 
-**내 코드** — `storage.py:46`
 
 ```python
 def stream(self) -> Iterator[T]:
@@ -179,14 +178,12 @@ def stream(self) -> Iterator[T]:
 
 **사용 이유**: `list`로 전부 읽으면 거래 수만큼 메모리 사용. 제너레이터는 필요한 만큼만 읽음
 
-**최신순이 문제**: 파일에는 오래된 거래가 먼저 쌓이지만 출력은 최신순 필요. 그래서 스트림을 `heapq.nlargest(limit, ...)`에 전달(`services.py:169`). 이 함수는 "지금까지 본 것 중 가장 큰 limit개"만 보관하므로 파일이 아무리 커도 메모리는 limit 건수 수준
-
 **측정 결과** (35MB, 30만 건 파일)
 
 | 방식 | 최대 메모리 |
 | --- | --- |
 | 이 프로그램의 `list --limit 3` | 약 20MB |
-| `summary --month 2024-05` | 약 21MB |
+| `summary --month 2026-05` | 약 21MB |
 | 비교: 파일 전체를 리스트로 읽기 | 약 299MB |
 
 `list`, `search`, `summary`, `export`가 모두 같은 `stream()`을 한 번 훑는 방식으로 동작
@@ -195,15 +192,13 @@ def stream(self) -> Iterator[T]:
 
 ### 4.2 Decorator (데코레이터)
 
-**한 줄 정의**: 함수를 감싸서 **원래 코드를 건드리지 않고** 기능을 덧붙이는 문법. 선물 포장지처럼 겉에 하나 더 씌우는 방식
+**한 줄 정의**: 함수를 감싸서 **원래 코드를 건드리지 않고** 기능을 덧붙이는 문법. 
 
-**내 코드** — `decorators.py`에 3개
 
 | 데코레이터 | 하는 일 | 붙인 곳 |
 | --- | --- | --- |
 | `@handle_errors` (:73) | 예외를 `[오류]/[힌트]` 메시지와 종료 코드로 바꿈 | `run()` (cli.py:285) |
 | `@log_call` (:34) | 호출·성공·실패를 `budget.log`에 기록 | `add`/`update`/`delete`/`set`/`remove`/`import_`/`export` |
-| `@timed` (:52) | 실행 시간을 `budget.log`에 기록 | `search`, `monthly_summary`, `import_`, `export` |
 
 ```python
 def log_call(func):
@@ -222,16 +217,6 @@ def log_call(func):
 
 **사용 이유**: 서비스 메서드마다 로그와 try/except를 쓰면 중복 발생, 본래 로직 은폐. 데코레이터 사용 시 서비스 코드에는 업무 규칙만 남음
 
-**실제 로그** (`data/budget.log`)
-
-```
-INFO call TransactionService.add(date='2024-01-01', type='expense', category='food', amount=100, ...)
-INFO ok   TransactionService.add
-INFO time ReportService.monthly_summary 0.1ms
-WARNING fail TransactionService.delete: NotFoundError: 존재하지 않는 거래 id 입니다: TX-999
-```
-
-> 참고: 코드에 보이는 `ParamSpec`, `Callable[P, R]`은 "감싼 함수의 인자 모양을 그대로 유지"하는 타입 표기일 뿐, 실행 동작에는 영향 없음
 
 ### 4.3 Type Hint (타입 힌트)
 
@@ -239,48 +224,26 @@ WARNING fail TransactionService.delete: NotFoundError: 존재하지 않는 거�
 
 **내 코드에서 눈에 띄는 것**
 
-| 표기 | 위치 | 의미 |
-| --- | --- | --- |
-| `TxType = Literal["income", "expense"]` | models.py:10 | 거래 타입은 이 두 문자열만 허용된다는 약속 |
-| `def stream(self) -> Iterator[T]` | storage.py:46 | "한 건씩 흘려보낸다"는 사실이 시그니처에 드러남 |
-| `def get(self, tx_id: str) -> Transaction \| None` | storage.py:120 | 결과가 **없을 수도 있다**고 호출하는 쪽에 알림 |
-| `class JsonlFile(Generic[T])` | storage.py:33 | `T`는 자리표시자. 거래/카테고리/예산 저장소가 같은 코드를 공유 |
-| `def parse_amount(value: str \| int) -> int` | models.py:75 | 문자열이나 정수를 받아 항상 양의 정수를 돌려줌 |
+| 표기 | 의미 |
+| --- | --- |
+| `TxType = Literal["income", "expense"]` | 거래 타입은 이 두 문자열만 허용된다는 약속 |
+| `def stream(self) -> Iterator[T]` | "한 건씩 흘려보낸다"는 사실이 시그니처에 드러남 |
+| `def get(self, tx_id: str) -> Transaction \| None` | 결과가 **없을 수도 있다**고 호출하는 쪽에 알림 |
+| `def parse_amount(value: str \| int) -> int` | 문자열이나 정수를 받아 항상 양의 정수를 돌려줌 |
 
 **얻는 이점**: 함수 정의만 읽어도 무엇을 넣고 무엇이 나오는지 파악 가능. 에디터가 오타나 타입 불일치를 미리 알려 줌
 
 **주의**: 타입을 자동 검사하는 도구(mypy)는 미설치로 실행하지 않음. 타입 힌트는 문서화와 에디터 지원 용도로 사용
 
-### 4.4 Dataclass
 
-**한 줄 정의**: 데이터를 담는 클래스를 `__init__` 등을 직접 쓰지 않고 선언만으로 만드는 문법
+### 4.4 파일 I/O
 
-**내 코드** — `models.py:131`
-
-```python
-@dataclass(frozen=True)
-class Transaction:
-    id: str
-    type: TxType
-    date: str
-    amount: int
-    category: str
-    memo: str = ""
-    tags: tuple[str, ...] = ()
-```
-
-- `frozen=True`: 만든 뒤 값 변경 불가. 수정 시 `dataclasses.replace()`로 **새 객체**를 만들어(`services.py` update) 의도치 않은 변경 방지
-- 같은 방식으로 `Budget`, `SearchCriteria`, `MonthlySummary`, `ImportResult` 정의
-- `to_dict()` / `from_dict()`로 파일의 JSON 한 줄과 객체를 상호 변환
-
-### 4.5 파일 I/O
-
-| 동작 | 방법 | 위치 |
-| --- | --- | --- |
-| 읽기 | `open()`을 열고 한 줄씩 순회하며 `yield` | storage.py:46 |
-| 추가 | `"a"` 모드로 열어 한 줄 쓰고 `flush` + `fsync` | storage.py:69 |
-| 수정·삭제 | 임시 파일에 전부 쓰고 `os.replace`로 교체 | storage.py:78 |
-| 인코딩 | 항상 UTF-8, `ensure_ascii=False`로 한글 그대로 저장 | storage.py |
+| 동작 | 방법 |
+| --- | --- |
+| 읽기 | `open()`을 열고 한 줄씩 순회하며 `yield` |
+| 추가 | `"a"` 모드로 열어 한 줄 쓰고 `flush` + `fsync` |
+| 수정·삭제 | 임시 파일에 전부 쓰고 `os.replace`로 교체 |
+| 인코딩 | 항상 UTF-8, `ensure_ascii=False`로 한글 그대로 저장 |
 
 **JSONL과 CSV 차이**
 
@@ -302,105 +265,14 @@ class Transaction:
 | memo | N | 문자열 |
 | tags | N | 쉼표 구분 문자열 (CSV에서는 따옴표로 감싸짐) |
 
-UTF-8, 첫 줄은 헤더. 읽을 때 BOM이 있어도 수용, 컬럼 순서는 무관. 필수 컬럼이 빠지면 파일 전체 거부
+UTF-8, 첫 줄은 헤더. 컬럼 순서는 무관. 필수 컬럼이 빠지면 파일 전체 거부
 
 ---
 
-## 5. 핵심 기능의 코드 실행 흐름
 
-공통 진입 흐름
+## 5. 예외 처리와 데이터 안전성
 
-```
-python3 -m budget_app <명령>
-  → __main__.py → cli.main()                    cli.py:296
-  → build_parser().parse_args()                 명령/옵션 해석
-  → run(args)  ← @handle_errors로 감싸짐      cli.py:286
-        Storage(data_dir).initialize()          폴더/파일 없으면 생성
-        로그 파일 설정
-        args.func(args, AppContext(storage))    선택된 cmd_* 실행
-  → 반환값(종료 코드)으로 프로그램 종료
-```
-
-### 5.1 `add` — 입력 → 검증 → 서비스 → 저장소 → 출력
-
-```
-① 입력      cli.cmd_add (cli.py:50)
-              _prompt("날짜: ", parse_date)       ┐ 검증 실패 시
-              _prompt("타입: ", parse_type)       │ [오류]/[힌트] 출력 후
-              _prompt("카테고리: ", require)       │ 같은 항목 재질문
-              _prompt("금액: ", parse_amount)     ┘
-② 검증      models.parse_* (models.py:53~110)
-              날짜 형식, 양수 정수, income/expense 확인
-            CategoryService.require (services.py:44)
-              등록된 카테고리인지 확인, 아니면 목록과 등록 방법을 힌트로 안내
-③ 서비스    TransactionService.add (services.py:82)
-              다시 한 번 검증 후 Transaction 객체 생성
-④ 저장소    TransactionRepository.next_id (storage.py:112)  → TX-000012
-            JsonlFile.append_many (storage.py:69)           → 파일 끝에 한 줄
-⑤ 출력      "[저장 완료] id=TX-000012"
-```
-
-검증을 CLI와 서비스에서 두 번 하는 이유는 역할 차이. CLI는 "틀리면 바로 다시 묻기"를 위해, 서비스는 CLI가 아닌 경로(CSV import 등)로 들어온 값도 막기 위함
-
-### 5.2 `list` / `search` — 스트리밍 + 최신순
-
-```
-cmd_list / cmd_search
-  → make_criteria  (조건을 SearchCriteria로 묶고 날짜 형식 검증)  services.py:136
-  → TransactionService.search (@timed)                            services.py:160
-        stream_matching  = (tx for tx in stream_all() if 조건에 맞음)   ← 제너레이터 체인
-        heapq.nlargest(limit, matches, key=(date, id))                 ← limit건만 유지
-  → format_transactions  (열 너비를 맞춰 정렬, 한글은 2칸으로 계산)
-  → 출력
-```
-
-### 5.3 `summary` — 한 번 훑으면서 집계
-
-```
-cmd_summary → ReportService.monthly_summary (@timed)            services.py:192
-   stream_all()을 한 번 돌면서:
-     해당 월이 아니면 건너뜀
-     income이면 총수입에 더함 / expense면 총지출 + 카테고리별 합계(Counter)
-   TOP N = 카테고리별 합계를 큰 순으로 N개
-   예산이 있으면 사용률 = 총지출 / 예산 × 100, 초과 여부 계산
-   거래가 0건이면 "데이터 없음"
- → format_summary → 출력
-```
-
-### 5.4 `update` / `delete` — 전부 아니면 무
-
-```
-cmd_update → TransactionService.update (@log_call)              services.py:97
-   바꿀 항목만 검증 (하나도 없으면 오류)
-   repo.get(id) 로 기존 거래 확인 (없으면 NotFoundError)
-   dataclasses.replace(old, **changes) 로 새 객체 생성
-   repo.update → JsonlFile.rewrite                              storage.py:78
-        ① 같은 폴더에 임시 파일 생성
-        ② 원본을 한 줄씩 읽으며, 대상 id만 새 내용으로 바꿔 임시 파일에 씀
-        ③ flush + fsync (디스크에 확실히 기록)
-        ④ os.replace(임시, 원본)   ← 이름만 바꾸는 한 번의 동작이라 중간 상태 없음
-        ⑤ 예외가 나면 임시 파일 삭제, 원본은 그대로
-```
-
-`delete`도 같은 `rewrite`를 쓰되 대상 id를 건너뛰고 기록
-
-### 5.5 `import` — 부분 성공
-
-```
-cmd_import → CsvService.import_ (@log_call @timed)              services.py:256
-   csv_io.read_rows: 헤더 검증 (필수 컬럼이 없으면 파일 전체 거부)
-   행마다 날짜/타입/카테고리/금액 검증
-        통과 → valid 목록에 모음
-        실패 → errors 목록에 "N번째 줄: 사유" 기록하고 건너뜀
-   통과한 행만 새 id를 붙여 한 번에 append_many
-   → "[완료] imported=N, skipped=M" + 오류 사유 출력
-```
-
----
-
-## 6. 예외 처리와 데이터 안전성
-
-### 6.1 예외 구조
+### 5.1 예외 구조
 
 `models.py:19`의 `BudgetAppError`가 모든 앱 예외의 부모 클래스이며, **원인(message)** 과 **해결 힌트(hint)** 를 항상 보유
 
@@ -417,10 +289,10 @@ BudgetAppError
 
 ```
 [오류] 날짜 형식이 올바르지 않습니다 (YYYY-MM-DD).
-[힌트] 예: 2024-01-15
+[힌트] 예: 2026-10-15
 ```
 
-### 6.2 종료 코드
+### 5.2 종료 코드
 
 | 코드 | 상황 |
 | --- | --- |
@@ -430,11 +302,11 @@ BudgetAppError
 | 70 | 예상하지 못한 오류 (상세는 `budget.log`에만 기록) |
 | 130 | 입력 취소 (Ctrl+C, 입력 도중 EOF) |
 
-### 6.3 비정상 입력 처리
+### 5.3 비정상 입력 처리
 
 | 입력 | 결과 |
 | --- | --- |
-| `2024-13-40` (잘못된 날짜) | 오류 + 힌트, `add`에서는 같은 항목 재입력 |
+| `2026-13-40` (잘못된 날짜) | 오류 + 힌트, `add`에서는 같은 항목 재입력 |
 | 금액 `0`, `-5`, `abc`, `1.5` | 거부 |
 | 타입이 `income`/`expense`가 아님 | 거부 |
 | 등록되지 않은 카테고리 | 등록된 목록과 `category add` 안내 후 재입력 |
@@ -447,7 +319,7 @@ BudgetAppError
 | `import` 일부 행이 잘못됨 | 그 행만 건너뛰고 나머지는 반영 |
 | 명령 옵션 누락/잘못된 값 | `[오류]`/`[힌트]` 형식, 종료 코드 2 |
 
-### 6.4 파일 손상 방지
+### 5.4 파일 손상 방지
 
 | 위험 | 대응 |
 | --- | --- |
@@ -457,7 +329,7 @@ BudgetAppError
 | 쓰기 권한 없음, 데이터 경로가 폴더가 아님 | 안내 메시지 + 종료 코드 2 |
 | 쓴 내용이 OS 캐시에만 남음 | `fsync`로 디스크에 반영 |
 
-### 6.5 실패했을 때의 동작 정리
+### 5.5 실패했을 때의 동작 정리
 
 | 작업 | 실패 시 |
 | --- | --- |
@@ -469,9 +341,9 @@ BudgetAppError
 
 ---
 
-## 7. 실행 시연 및 테스트 결과
+## 6. 실행 시연 및 테스트 결과
 
-### 7.1 시연 (명령어 → 기대 결과 → 실제 출력)
+### 6.1 시연 (명령어 → 기대 결과 → 실제 출력)
 
 출력은 실제 실행 결과(①만 입력을 읽기 쉽게 줄 단위로 정리). `--data-dir`로 빈 폴더를 지정해 처음부터 진행. 보기 편하도록 아래 명령에서는 `--data-dir` 옵션 생략
 
@@ -481,10 +353,10 @@ BudgetAppError
 
 ```
 $ python3 -m budget_app add
-날짜(YYYY-MM-DD): 2024-13-40
+날짜(YYYY-MM-DD): 2026-13-40
 [오류] 날짜 형식이 올바르지 않습니다 (YYYY-MM-DD).
-[힌트] 예: 2024-01-15
-날짜(YYYY-MM-DD): 2024-01-15
+[힌트] 예: 2026-10-15
+날짜(YYYY-MM-DD): 2026-10-15
 타입(income/expense): expense
 카테고리: foodd
 [오류] 등록되지 않은 카테고리입니다: foodd
@@ -507,16 +379,16 @@ $ python3 -m budget_app add
 
 ```
 $ python3 -m budget_app list --limit 3
-TX-000001 | 2024-01-15 | expense | food      |   15000 | 점심  #meal
-TX-000002 | 2024-01-14 | income  | salary    | 3000000 |
-TX-000004 | 2024-01-12 | expense | transport |   20000 |
+TX-000001 | 2026-10-15 | expense | food      |   15000 | 점심  #meal
+TX-000002 | 2026-10-14 | income  | salary    | 3000000 |
+TX-000004 | 2026-10-12 | expense | transport |   20000 |
 ```
 
 **③ search**
 
 ```
 $ python3 -m budget_app search --category food --q 점심
-TX-000001 | 2024-01-15 | expense | food | 15000 | 점심  #meal
+TX-000001 | 2026-10-15 | expense | food | 15000 | 점심  #meal
 ```
 
 **④ budget set + summary**
@@ -524,10 +396,10 @@ TX-000001 | 2024-01-15 | expense | food | 15000 | 점심  #meal
 기대: 합계, TOP N, 예산 사용률 출력
 
 ```
-$ python3 -m budget_app budget set --month 2024-01 --amount 500000
-[저장 완료] 2024-01 예산 500000원
-$ python3 -m budget_app summary --month 2024-01 --top 3
-[2024-01 월별 요약]
+$ python3 -m budget_app budget set --month 2026-10 --amount 500000
+[저장 완료] 2026-10 예산 500000원
+$ python3 -m budget_app summary --month 2026-10 --top 3
+[2026-10 월별 요약]
 총 수입: 3000000원
 총 지출: 185000원
 잔액: 2815000원
@@ -542,8 +414,8 @@ $ python3 -m budget_app summary --month 2024-01 --top 3
 **⑤ 예산 초과 경고 / 데이터 없는 달**
 
 ```
-$ python3 -m budget_app budget set --month 2024-01 --amount 100000
-$ python3 -m budget_app summary --month 2024-01
+$ python3 -m budget_app budget set --month 2026-10 --amount 100000
+$ python3 -m budget_app summary --month 2026-10
 ...
 예산: 100000원 (사용률 185.0%)
 [경고] 예산을 85000원 초과했습니다!
@@ -559,7 +431,7 @@ $ python3 -m budget_app summary --month 2023-05
 ```
 $ python3 -m budget_app update --id TX-000001 --amount 18000
 [수정 완료] id=TX-000001
-TX-000001 | 2024-01-15 | expense | food | 18000 | 점심  #meal
+TX-000001 | 2026-10-15 | expense | food | 18000 | 점심  #meal
 $ python3 -m budget_app delete --id TX-000003
 [삭제 완료] id=TX-000003
 $ python3 -m budget_app delete --id TX-000003
@@ -580,13 +452,13 @@ $ python3 -m budget_app category remove --name food
 기대: 내보낸 CSV를 그대로 다시 가져오기 가능
 
 ```
-$ python3 -m budget_app export --out e.csv --month 2024-01
+$ python3 -m budget_app export --out e.csv --month 2026-10
 [완료] e.csv (3 records)
 $ cat e.csv
 date,type,category,amount,memo,tags
-2024-01-15,expense,food,18000,점심,meal
-2024-01-14,income,salary,3000000,,
-2024-01-12,expense,transport,20000,,
+2026-10-15,expense,food,18000,점심,meal
+2026-10-14,income,salary,3000000,,
+2026-10-12,expense,transport,20000,,
 $ python3 -m budget_app import --from e.csv
 [완료] imported=3, skipped=0
 ```
@@ -604,9 +476,9 @@ $ python3 -m budget_app import --from mix.csv
 
 ```
 # transactions.jsonl
-{"id":"TX-000001","type":"expense","date":"2024-01-15","amount":18000,"category":"food","memo":"점심","tags":["meal"]}
+{"id":"TX-000001","type":"expense","date":"2026-10-15","amount":18000,"category":"food","memo":"점심","tags":["meal"]}
 # categories.jsonl
 {"name":"food"}
 # budgets.jsonl
-{"month":"2024-01","amount":100000}
+{"month":"2026-10","amount":100000}
 ```
