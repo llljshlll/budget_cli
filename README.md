@@ -48,7 +48,7 @@ python3 -m budget_app summary --month 2026-10
 | update/delete는 안전한 파일 교체 | 임시 파일 + `os.replace` | storage.py:78 (`rewrite`) |
 | 카테고리 삭제 시 사용 중이면 차단 | `CategoryInUseError` | services.py:62 |
 | import/export CSV 스키마 고정 | `COLUMNS`, `REQUIRED_COLUMNS` | csv_io.py:13 |
-| 데코레이터 1개 이상 적용 | 3개 구현, 실제 적용 | decorators.py |
+| 데코레이터 1개 이상 적용 | 구현, 실제 적용 | decorators.py |
 | 스택트레이스 금지, 종료 코드 | `handle_errors` | decorators.py:73 |
 | 모듈 3개 이상 | 8개 | `budget_app/` |
 | 표준 라이브러리만 사용 | 외부 import 없음 | 전체 |
