@@ -18,11 +18,6 @@ python3 -m budget_app summary --month 2026-10
 ---
 
 ## 2. 요구사항과 구현 결과  
-__main__.py → cli.main()이 build_parser().parse_args()로 인자를 파싱   
-→ run()(@handle_errors)이 Storage.initialize()로 폴더와 파일을 보장하고 로깅을 설정    
-→ args.func(cmd_*)가 AppContext의 서비스를 호출   
-→ 서비스가 storage.py의 저장소를 호출   
-→ formatters.py가 출력 문자열을 만들고, 종료 코드를 반환    
 
 ### 필수 기능 10가지
 
